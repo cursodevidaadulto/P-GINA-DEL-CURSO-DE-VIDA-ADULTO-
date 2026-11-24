@@ -1,0 +1,293 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'cursodevidaadulto@gmail.com' ||
+        request.auth.token.email == 'tony15ris@gmail.com'
+      );
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasNominalAccess() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.nominalAccess == true
+      );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'nominalAccess', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'nominalAccess', 'active', 'microred', 'establishment', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 160
+        && data.role in ['admin', 'consultor']
+        && data.nominalAccess is bool
+        && data.active is bool
+        && (!('microred' in data) || (data.microred is string && data.microred.size() <= 120))
+        && (!('establishment' in data) || (data.establishment is string && data.establishment.size() <= 160))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRegistry(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 160
+        && data.grantedBy is string && data.grantedBy.size() >= 1 && data.grantedBy.size() <= 128
+        && data.createdAt == request.time;
+    }
+
+    function isValidPublicManifest(data) {
+      return data.keys().hasAll(['module', 'versionId', 'isDemo', 'fileName', 'rowCount', 'batchIds', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['module', 'versionId', 'isDemo', 'fileName', 'rowCount', 'establishmentCount', 'microredCount', 'batchIds', 'summary', 'updatedBy', 'updatedAt'])
+        && data.module in ['morbilidades', 'indicadores', 'calidad_resumen', 'pacientes_resumen']
+        && isValidId(data.versionId)
+        && data.isDemo is bool
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 240
+        && data.rowCount is number && data.rowCount >= 0
+        && (!('establishmentCount' in data) || (data.establishmentCount is number && data.establishmentCount >= 0))
+        && (!('microredCount' in data) || (data.microredCount is number && data.microredCount >= 0))
+        && data.batchIds is list && data.batchIds.size() <= 100
+        && (data.batchIds.size() == 0 || data.batchIds[0] is string)
+        && (!('summary' in data) || data.summary is map)
+        && data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 160
+        && data.updatedAt == request.time;
+    }
+
+    function isValidPublicBatch(data) {
+      return data.keys().hasAll(['module', 'versionId', 'chunkIndex', 'rows', 'createdAt'])
+        && data.keys().hasOnly(['module', 'versionId', 'chunkIndex', 'rows', 'createdAt'])
+        && data.module in ['morbilidades', 'indicadores', 'calidad_resumen', 'pacientes_resumen']
+        && isValidId(data.versionId)
+        && data.chunkIndex is number && data.chunkIndex >= 0
+        && data.rows is list && data.rows.size() <= 350
+        && (data.rows.size() == 0 || data.rows[0] is map)
+        && data.createdAt == request.time;
+    }
+
+    function isValidNominalManifest(data) {
+      return data.keys().hasAll(['module', 'versionId', 'isDemo', 'fileName', 'rowCount', 'batchIds', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['module', 'versionId', 'isDemo', 'fileName', 'rowCount', 'batchIds', 'columnHeaders', 'updatedBy', 'updatedAt'])
+        && data.module in ['pacientes', 'calidad']
+        && isValidId(data.versionId)
+        && data.isDemo is bool
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 240
+        && data.rowCount is number && data.rowCount >= 0
+        && data.batchIds is list && data.batchIds.size() <= 100
+        && (data.batchIds.size() == 0 || data.batchIds[0] is string)
+        && (!('columnHeaders' in data) || (data.columnHeaders is list && data.columnHeaders.size() <= 60))
+        && data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 160
+        && data.updatedAt == request.time;
+    }
+
+    function isValidNominalBatch(data) {
+      return data.keys().hasAll(['module', 'versionId', 'chunkIndex', 'rows', 'createdAt'])
+        && data.keys().hasOnly(['module', 'versionId', 'chunkIndex', 'rows', 'createdAt'])
+        && data.module in ['pacientes', 'calidad']
+        && isValidId(data.versionId)
+        && data.chunkIndex is number && data.chunkIndex >= 0
+        && data.rows is list && data.rows.size() <= 350
+        && (data.rows.size() == 0 || data.rows[0] is map)
+        && data.createdAt == request.time;
+    }
+
+    function isValidUploadHistory(data) {
+      return data.keys().hasAll(['historyId', 'module', 'versionId', 'fileName', 'rowCount', 'duplicateCount', 'status', 'uploadedByUid', 'uploadedByName', 'uploadedAt', 'batchIds'])
+        && data.keys().hasOnly(['historyId', 'module', 'versionId', 'fileName', 'rowCount', 'duplicateCount', 'status', 'validationNotes', 'uploadedByUid', 'uploadedByName', 'uploadedAt', 'batchIds'])
+        && isValidId(data.historyId)
+        && data.module in ['pacientes', 'calidad', 'morbilidades', 'indicadores']
+        && isValidId(data.versionId)
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 240
+        && data.rowCount is number && data.rowCount >= 0
+        && data.duplicateCount is number && data.duplicateCount >= 0
+        && data.status in ['Publicado', 'Histórico', 'Cancelado']
+        && (!('validationNotes' in data) || (data.validationNotes is string && data.validationNotes.size() <= 600))
+        && data.uploadedByUid is string && data.uploadedByUid.size() >= 1 && data.uploadedByUid.size() <= 128
+        && data.uploadedByName is string && data.uploadedByName.size() >= 1 && data.uploadedByName.size() <= 160
+        && data.uploadedAt is timestamp
+        && data.batchIds is list && data.batchIds.size() <= 100
+        && (data.batchIds.size() == 0 || data.batchIds[0] is string);
+    }
+
+    function isValidCartillaResource(data) {
+      return data.keys().hasAll(['resourceId', 'title', 'topic', 'resourceType', 'summary', 'content', 'published', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['resourceId', 'title', 'topic', 'resourceType', 'summary', 'content', 'hisCodes', 'fileUrl', 'published', 'authorUid', 'createdAt', 'updatedAt'])
+        && isValidId(data.resourceId)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 200
+        && data.topic in [
+          'Códigos HIS',
+          'Diagnósticos',
+          'Procedimientos',
+          'Laboratorios',
+          'Criterios de registro',
+          'Ejemplos de registros correctos',
+          'Errores frecuentes',
+          'Recomendaciones de indicadores'
+        ]
+        && data.resourceType in ['Guía HIS', 'Documento PDF', 'Documento Word', 'Video tutorial']
+        && data.summary is string && data.summary.size() <= 600
+        && data.content is string && data.content.size() <= 12000
+        && (!('hisCodes' in data) || (data.hisCodes is list && data.hisCodes.size() <= 40))
+        && (!('fileUrl' in data) || (data.fileUrl is string && data.fileUrl.size() <= 800))
+        && data.published is bool
+        && data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && existing().uid == request.auth.uid);
+      allow create: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isBootstrappedAdmin() ||
+          (incoming().role == 'consultor' && incoming().nominalAccess == false && incoming().active == true)
+        );
+      allow update: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'microred', 'establishment', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(adminId)
+        && isValidAdminRegistry(incoming())
+        && incoming().uid == adminId
+        && incoming().grantedBy == request.auth.uid
+        && isBootstrappedAdmin();
+      allow update: if false;
+      allow delete: if isValidId(adminId) && isBootstrappedAdmin();
+    }
+
+    match /public_manifests/{moduleId} {
+      allow get: if isValidId(moduleId);
+      allow list: if true;
+      allow create, update: if isValidId(moduleId)
+        && isAdmin()
+        && isValidPublicManifest(incoming())
+        && incoming().module == moduleId;
+      allow delete: if isValidId(moduleId) && isAdmin();
+    }
+
+    match /public_batches/{batchId} {
+      allow get: if isValidId(batchId);
+      allow list: if false;
+      allow create, update: if isValidId(batchId)
+        && isAdmin()
+        && isValidPublicBatch(incoming());
+      allow delete: if isValidId(batchId) && isAdmin();
+    }
+
+    match /nominal_manifests/{moduleId} {
+      allow get: if isValidId(moduleId) && hasNominalAccess();
+      allow list: if isBootstrappedAdmin();
+      allow create, update: if isValidId(moduleId)
+        && isAdmin()
+        && isValidNominalManifest(incoming())
+        && incoming().module == moduleId;
+      allow delete: if isValidId(moduleId) && isAdmin();
+    }
+
+    match /nominal_batches/{batchId} {
+      allow get: if isValidId(batchId) && hasNominalAccess();
+      allow list: if false;
+      allow create, update: if isValidId(batchId)
+        && isAdmin()
+        && isValidNominalBatch(incoming());
+      allow delete: if isValidId(batchId) && isAdmin();
+    }
+
+    match /upload_history/{historyId} {
+      allow get: if isValidId(historyId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(historyId)
+        && isAdmin()
+        && isValidUploadHistory(incoming())
+        && incoming().historyId == historyId
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().uploadedAt == request.time;
+      allow update: if isValidId(historyId)
+        && isAdmin()
+        && isValidUploadHistory(incoming())
+        && incoming().historyId == existing().historyId
+        && incoming().uploadedAt == existing().uploadedAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'validationNotes']);
+      allow delete: if isValidId(historyId) && isAdmin();
+    }
+
+    match /cartilla_resources/{resourceId} {
+      allow get: if isValidId(resourceId) && (existing().published == true || isAdmin());
+      allow list: if existing().published == true || isBootstrappedAdmin();
+      allow create: if isValidId(resourceId)
+        && isAdmin()
+        && isValidCartillaResource(incoming())
+        && incoming().resourceId == resourceId
+        && incoming().authorUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(resourceId)
+        && isAdmin()
+        && isValidCartillaResource(incoming())
+        && incoming().resourceId == existing().resourceId
+        && incoming().authorUid == existing().authorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(resourceId) && isAdmin();
+    }
+  }
+}

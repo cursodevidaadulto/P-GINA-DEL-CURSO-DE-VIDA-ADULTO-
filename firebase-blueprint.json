@@ -1,0 +1,388 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de usuario autenticado del personal de salud de la RIS San Ignacio con control de acceso basado en roles.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "consultor"]
+        },
+        "nominalAccess": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "microred": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "establishment": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "nominalAccess", "active", "createdAt", "updatedAt"]
+    },
+    "AdminRegistry": {
+      "title": "AdminRegistry",
+      "description": "Registro de administradores autorizados para la gestión integral de la plataforma.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "grantedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "displayName", "grantedBy", "createdAt"]
+    },
+    "PublicManifest": {
+      "title": "PublicManifest",
+      "description": "Manifiesto de versión publicada con métricas agregadas sin datos personales (morbilidades, indicadores, resumen de calidad y seguimiento agregado).",
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": ["morbilidades", "indicadores", "calidad_resumen", "pacientes_resumen"]
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isDemo": {
+          "type": "boolean"
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "rowCount": {
+          "type": "number"
+        },
+        "establishmentCount": {
+          "type": "number"
+        },
+        "microredCount": {
+          "type": "number"
+        },
+        "batchIds": {
+          "type": "array"
+        },
+        "summary": {
+          "type": "object"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["module", "versionId", "isDemo", "fileName", "rowCount", "batchIds", "updatedBy", "updatedAt"]
+    },
+    "PublicBatch": {
+      "title": "PublicBatch",
+      "description": "Lote de registros estrictamente agregados y anonimizados para consulta pública.",
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": ["morbilidades", "indicadores", "calidad_resumen", "pacientes_resumen"]
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "chunkIndex": {
+          "type": "number"
+        },
+        "rows": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["module", "versionId", "chunkIndex", "rows", "createdAt"]
+    },
+    "NominalManifest": {
+      "title": "NominalManifest",
+      "description": "Manifiesto de versión publicada para módulos con datos personales o nominales (acceso estrictamente autorizado).",
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": ["pacientes", "calidad"]
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isDemo": {
+          "type": "boolean"
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "rowCount": {
+          "type": "number"
+        },
+        "batchIds": {
+          "type": "array"
+        },
+        "columnHeaders": {
+          "type": "array"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["module", "versionId", "isDemo", "fileName", "rowCount", "batchIds", "updatedBy", "updatedAt"]
+    },
+    "NominalBatch": {
+      "title": "NominalBatch",
+      "description": "Lote aislado de registros nominales de pacientes u observaciones detalladas (solo personal autorizado).",
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": ["pacientes", "calidad"]
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "chunkIndex": {
+          "type": "number"
+        },
+        "rows": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["module", "versionId", "chunkIndex", "rows", "createdAt"]
+    },
+    "UploadHistory": {
+      "title": "UploadHistory",
+      "description": "Historial de auditoría de cargas y validaciones de archivos Excel por módulo.",
+      "type": "object",
+      "properties": {
+        "historyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "module": {
+          "type": "string",
+          "enum": ["pacientes", "calidad", "morbilidades", "indicadores"]
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "rowCount": {
+          "type": "number"
+        },
+        "duplicateCount": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Publicado", "Histórico", "Cancelado"]
+        },
+        "validationNotes": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "uploadedByUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "uploadedByName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "uploadedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "batchIds": {
+          "type": "array"
+        }
+      },
+      "required": ["historyId", "module", "versionId", "fileName", "rowCount", "duplicateCount", "status", "uploadedByUid", "uploadedByName", "uploadedAt", "batchIds"]
+    },
+    "CartillaResource": {
+      "title": "CartillaResource",
+      "description": "Recurso educativo de la Cartilla de Registro HIS para el Curso de Vida Adulto.",
+      "type": "object",
+      "properties": {
+        "resourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "topic": {
+          "type": "string",
+          "enum": [
+            "Códigos HIS",
+            "Diagnósticos",
+            "Procedimientos",
+            "Laboratorios",
+            "Criterios de registro",
+            "Ejemplos de registros correctos",
+            "Errores frecuentes",
+            "Recomendaciones de indicadores"
+          ]
+        },
+        "resourceType": {
+          "type": "string",
+          "enum": ["Guía HIS", "Documento PDF", "Documento Word", "Video tutorial"]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 12000
+        },
+        "hisCodes": {
+          "type": "array"
+        },
+        "fileUrl": {
+          "type": "string",
+          "maxLength": 800
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["resourceId", "title", "topic", "resourceType", "summary", "content", "published", "authorUid", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Perfiles de usuarios con administrador autorizado, consultores y bandera de acceso nominal."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRegistry" },
+      "description": "Registro de administradores autorizados de la RIS San Ignacio."
+    },
+    "/public_manifests/{moduleId}": {
+      "schema": { "$ref": "#/entities/PublicManifest" },
+      "description": "Manifiesto de datos agregados públicos (sin PII) por módulo."
+    },
+    "/public_batches/{batchId}": {
+      "schema": { "$ref": "#/entities/PublicBatch" },
+      "description": "Lotes de datos agregados públicos (sin PII) por módulo y versión."
+    },
+    "/nominal_manifests/{moduleId}": {
+      "schema": { "$ref": "#/entities/NominalManifest" },
+      "description": "Manifiesto de módulos nominales restringidos (seguimiento por pacientes y control de calidad detallado)."
+    },
+    "/nominal_batches/{batchId}": {
+      "schema": { "$ref": "#/entities/NominalBatch" },
+      "description": "Lotes de registros nominales estrictamente protegidos para personal autorizado."
+    },
+    "/upload_history/{historyId}": {
+      "schema": { "$ref": "#/entities/UploadHistory" },
+      "description": "Historial de auditoría de cargas Excel y control de versiones."
+    },
+    "/cartilla_resources/{resourceId}": {
+      "schema": { "$ref": "#/entities/CartillaResource" },
+      "description": "Biblioteca digital de la Cartilla de Registro del Curso de Vida Adulto."
+    }
+  }
+}

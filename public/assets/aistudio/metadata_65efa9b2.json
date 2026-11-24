@@ -1,0 +1,6 @@
+{
+  "name": "CURSO DE VIDA ADULTO — Red Integrada de Salud San Ignacio",
+  "description": "Plataforma Virtual de la Red Integrada de Salud San Ignacio, Cajamarca, Perú. Juntos por el Cuidado Integral.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
