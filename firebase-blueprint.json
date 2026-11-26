@@ -349,6 +349,110 @@
         }
       },
       "required": ["resourceId", "title", "topic", "resourceType", "summary", "content", "published", "authorUid", "createdAt", "updatedAt"]
+    },
+    "DriveSyncState": {
+      "title": "DriveSyncState",
+      "description": "Estado de sincronización de Google Drive por módulo.",
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": ["pacientes", "calidad", "morbilidades", "indicadores", "repositorio"]
+        },
+        "driveFileId": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "mimeType": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "modifiedTime": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "lastCheckedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "validationStatus": {
+          "type": "string",
+          "enum": ["ok", "error", "pending"]
+        },
+        "rowCount": {
+          "type": "number"
+        },
+        "errorMessage": {
+          "type": "string",
+          "maxLength": 800
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["module", "driveFileId", "fileName", "mimeType", "modifiedTime", "lastCheckedAt", "validationStatus", "rowCount", "updatedBy", "updatedAt"]
+    },
+    "DriveCatalogItem": {
+      "title": "DriveCatalogItem",
+      "description": "Metadatos clasificados de documentos sincronizados desde la carpeta central de Google Drive.",
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "mimeType": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "category": {
+          "type": "string",
+          "enum": ["PDF", "Imagen", "Presentación", "Hoja de cálculo", "Documento", "Video", "Carpeta", "Otro"]
+        },
+        "targetModule": {
+          "type": "string",
+          "enum": ["pacientes", "calidad", "morbilidades", "indicadores", "cartilla", "general"]
+        },
+        "folderPath": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "sizeBytes": {
+          "type": "number"
+        },
+        "modifiedTime": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "webViewLink": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "syncedBy": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["fileId", "name", "mimeType", "category", "targetModule", "folderPath", "sizeBytes", "modifiedTime", "webViewLink", "syncedBy", "updatedAt"]
     }
   },
   "firestore": {
@@ -383,6 +487,14 @@
     "/cartilla_resources/{resourceId}": {
       "schema": { "$ref": "#/entities/CartillaResource" },
       "description": "Biblioteca digital de la Cartilla de Registro del Curso de Vida Adulto."
+    },
+    "/drive_sync_state/{moduleId}": {
+      "schema": { "$ref": "#/entities/DriveSyncState" },
+      "description": "Estado de sincronización de Google Drive por módulo."
+    },
+    "/drive_catalog/{fileId}": {
+      "schema": { "$ref": "#/entities/DriveCatalogItem" },
+      "description": "Índice de documentos sincronizados y clasificados desde Google Drive."
     }
   }
 }

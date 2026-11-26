@@ -289,5 +289,57 @@ service cloud.firestore {
         && incoming().updatedAt == request.time;
       allow delete: if isValidId(resourceId) && isAdmin();
     }
+
+    function isValidDriveSyncState(data) {
+      return data.keys().hasAll(['module', 'driveFileId', 'fileName', 'mimeType', 'modifiedTime', 'lastCheckedAt', 'validationStatus', 'rowCount', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['module', 'driveFileId', 'fileName', 'mimeType', 'modifiedTime', 'lastCheckedAt', 'validationStatus', 'rowCount', 'errorMessage', 'updatedBy', 'updatedAt'])
+        && data.module in ['pacientes', 'calidad', 'morbilidades', 'indicadores', 'repositorio']
+        && data.driveFileId is string && data.driveFileId.size() >= 1 && data.driveFileId.size() <= 160
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 240
+        && data.mimeType is string && data.mimeType.size() <= 160
+        && data.modifiedTime is string && data.modifiedTime.size() <= 64
+        && data.lastCheckedAt is string && data.lastCheckedAt.size() <= 64
+        && data.validationStatus in ['ok', 'error', 'pending']
+        && data.rowCount is number && data.rowCount >= 0
+        && (!('errorMessage' in data) || (data.errorMessage is string && data.errorMessage.size() <= 800))
+        && data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 160
+        && data.updatedAt == request.time;
+    }
+
+    function isValidDriveCatalogItem(data) {
+      return data.keys().hasAll(['fileId', 'name', 'mimeType', 'category', 'targetModule', 'folderPath', 'sizeBytes', 'modifiedTime', 'webViewLink', 'syncedBy', 'updatedAt'])
+        && data.keys().hasOnly(['fileId', 'name', 'mimeType', 'category', 'targetModule', 'folderPath', 'sizeBytes', 'modifiedTime', 'webViewLink', 'syncedBy', 'updatedAt'])
+        && isValidId(data.fileId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 240
+        && data.mimeType is string && data.mimeType.size() <= 160
+        && data.category in ['PDF', 'Imagen', 'Presentación', 'Hoja de cálculo', 'Documento', 'Video', 'Carpeta', 'Otro']
+        && data.targetModule in ['pacientes', 'calidad', 'morbilidades', 'indicadores', 'cartilla', 'general']
+        && data.folderPath is string && data.folderPath.size() <= 300
+        && data.sizeBytes is number && data.sizeBytes >= 0
+        && data.modifiedTime is string && data.modifiedTime.size() <= 64
+        && data.webViewLink is string && data.webViewLink.size() <= 600
+        && data.syncedBy is string && data.syncedBy.size() >= 1 && data.syncedBy.size() <= 160
+        && data.updatedAt == request.time;
+    }
+
+    match /drive_sync_state/{moduleId} {
+      allow get: if isValidId(moduleId);
+      allow list: if true;
+      allow create, update: if isValidId(moduleId)
+        && isAdmin()
+        && isValidDriveSyncState(incoming())
+        && incoming().module == moduleId;
+      allow delete: if isValidId(moduleId) && isAdmin();
+    }
+
+    match /drive_catalog/{fileId} {
+      allow get: if isValidId(fileId);
+      allow list: if true;
+      allow create, update: if isValidId(fileId)
+        && isAdmin()
+        && isValidDriveCatalogItem(incoming())
+        && incoming().fileId == fileId;
+      allow delete: if isValidId(fileId) && isAdmin();
+    }
   }
 }

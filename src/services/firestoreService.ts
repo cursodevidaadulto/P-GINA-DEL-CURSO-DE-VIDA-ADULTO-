@@ -151,6 +151,20 @@ export async function fetchNominalModuleData(
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms = 4500, label = 'Operación'): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} excedió el tiempo de espera.`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function publishAnalyzedDataset(
   analysis: AnalyzedExcelResult,
   user: UserProfile
@@ -163,7 +177,7 @@ export async function publishAnalyzedDataset(
       ? 'calidad_resumen'
       : analysis.module;
 
-  // 1. Write public batches
+  // 1. Write public batches in parallel (groups of 5)
   const publicBatchIds: string[] = [];
   const publicChunks: Record<string, unknown>[][] = [];
   for (let i = 0; i < analysis.publicRows.length; i += CHUNK_SIZE) {
@@ -173,44 +187,53 @@ export async function publishAnalyzedDataset(
     publicChunks.push([]);
   }
 
-  for (let idx = 0; idx < publicChunks.length; idx++) {
-    const batchId = `pub_${publicModuleKey}_${versionId}_${idx}`;
-    publicBatchIds.push(batchId);
-    const batchPath = `public_batches/${batchId}`;
-    try {
-      await setDoc(doc(db, 'public_batches', batchId), {
+  for (let i = 0; i < publicChunks.length; i += 5) {
+    const slice = publicChunks.slice(i, i + 5);
+    const batch = writeBatch(db);
+    slice.forEach((rows, offset) => {
+      const idx = i + offset;
+      const batchId = `pub_${publicModuleKey}_${versionId}_${idx}`;
+      publicBatchIds.push(batchId);
+      batch.set(doc(db, 'public_batches', batchId), {
         module: publicModuleKey,
         versionId,
         chunkIndex: idx,
-        rows: publicChunks[idx],
+        rows,
         createdAt: serverTimestamp(),
       });
+    });
+    try {
+      await withTimeout(batch.commit(), 5000, 'Publicación de lotes públicos');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, batchPath);
+      handleFirestoreError(error, OperationType.CREATE, `public_batches/${publicModuleKey}`);
     }
   }
 
   // 2. Write public manifest
   const pubManifestPath = `public_manifests/${publicModuleKey}`;
   try {
-    await setDoc(doc(db, 'public_manifests', publicModuleKey), {
-      module: publicModuleKey,
-      versionId,
-      isDemo: false,
-      fileName: analysis.fileName.slice(0, 240),
-      rowCount: analysis.rowCount,
-      establishmentCount: analysis.establishmentCount,
-      microredCount: analysis.microredCount,
-      batchIds: publicBatchIds.slice(0, 100),
-      summary: analysis.summary,
-      updatedBy: user.displayName.slice(0, 160),
-      updatedAt: serverTimestamp(),
-    });
+    await withTimeout(
+      setDoc(doc(db, 'public_manifests', publicModuleKey), {
+        module: publicModuleKey,
+        versionId,
+        isDemo: false,
+        fileName: analysis.fileName.slice(0, 240),
+        rowCount: analysis.rowCount,
+        establishmentCount: analysis.establishmentCount,
+        microredCount: analysis.microredCount,
+        batchIds: publicBatchIds.slice(0, 100),
+        summary: analysis.summary,
+        updatedBy: user.displayName.slice(0, 160),
+        updatedAt: serverTimestamp(),
+      }),
+      4500,
+      'Manifiesto público'
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, pubManifestPath);
   }
 
-  // 3. If nominal module, write nominal batches + nominal manifest
+  // 3. If nominal module, write nominal batches in parallel groups + nominal manifest
   const nominalBatchIds: string[] = [];
   if (analysis.module === 'pacientes' || analysis.module === 'calidad') {
     const nominalChunks: NominalRecord[][] = [];
@@ -219,36 +242,45 @@ export async function publishAnalyzedDataset(
     }
     if (nominalChunks.length === 0) nominalChunks.push([]);
 
-    for (let idx = 0; idx < nominalChunks.length; idx++) {
-      const batchId = `nom_${analysis.module}_${versionId}_${idx}`;
-      nominalBatchIds.push(batchId);
-      const batchPath = `nominal_batches/${batchId}`;
-      try {
-        await setDoc(doc(db, 'nominal_batches', batchId), {
+    for (let i = 0; i < nominalChunks.length; i += 5) {
+      const slice = nominalChunks.slice(i, i + 5);
+      const batch = writeBatch(db);
+      slice.forEach((rows, offset) => {
+        const idx = i + offset;
+        const batchId = `nom_${analysis.module}_${versionId}_${idx}`;
+        nominalBatchIds.push(batchId);
+        batch.set(doc(db, 'nominal_batches', batchId), {
           module: analysis.module,
           versionId,
           chunkIndex: idx,
-          rows: nominalChunks[idx],
+          rows,
           createdAt: serverTimestamp(),
         });
+      });
+      try {
+        await withTimeout(batch.commit(), 5000, 'Publicación de lotes nominales');
       } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, batchPath);
+        handleFirestoreError(error, OperationType.CREATE, `nominal_batches/${analysis.module}`);
       }
     }
 
     const nomManifestPath = `nominal_manifests/${analysis.module}`;
     try {
-      await setDoc(doc(db, 'nominal_manifests', analysis.module), {
-        module: analysis.module,
-        versionId,
-        isDemo: false,
-        fileName: analysis.fileName.slice(0, 240),
-        rowCount: analysis.rowCount,
-        batchIds: nominalBatchIds.slice(0, 100),
-        columnHeaders: analysis.columnHeaders.slice(0, 60),
-        updatedBy: user.displayName.slice(0, 160),
-        updatedAt: serverTimestamp(),
-      });
+      await withTimeout(
+        setDoc(doc(db, 'nominal_manifests', analysis.module), {
+          module: analysis.module,
+          versionId,
+          isDemo: false,
+          fileName: analysis.fileName.slice(0, 240),
+          rowCount: analysis.rowCount,
+          batchIds: nominalBatchIds.slice(0, 100),
+          columnHeaders: analysis.columnHeaders.slice(0, 60),
+          updatedBy: user.displayName.slice(0, 160),
+          updatedAt: serverTimestamp(),
+        }),
+        4500,
+        'Manifiesto nominal'
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, nomManifestPath);
     }
@@ -258,20 +290,24 @@ export async function publishAnalyzedDataset(
   const historyId = `hist_${versionId}`;
   const historyPath = `upload_history/${historyId}`;
   try {
-    await setDoc(doc(db, 'upload_history', historyId), {
-      historyId,
-      module: analysis.module as DataModuleKey,
-      versionId,
-      fileName: analysis.fileName.slice(0, 240),
-      rowCount: analysis.rowCount,
-      duplicateCount: analysis.duplicateCount,
-      status: 'Publicado',
-      validationNotes: analysis.validationNotes.slice(0, 600),
-      uploadedByUid: user.uid,
-      uploadedByName: user.displayName.slice(0, 160),
-      uploadedAt: serverTimestamp(),
-      batchIds: (nominalBatchIds.length ? nominalBatchIds : publicBatchIds).slice(0, 100),
-    });
+    await withTimeout(
+      setDoc(doc(db, 'upload_history', historyId), {
+        historyId,
+        module: analysis.module as DataModuleKey,
+        versionId,
+        fileName: analysis.fileName.slice(0, 240),
+        rowCount: analysis.rowCount,
+        duplicateCount: analysis.duplicateCount,
+        status: 'Publicado',
+        validationNotes: analysis.validationNotes.slice(0, 600),
+        uploadedByUid: user.uid,
+        uploadedByName: user.displayName.slice(0, 160),
+        uploadedAt: serverTimestamp(),
+        batchIds: (nominalBatchIds.length ? nominalBatchIds : publicBatchIds).slice(0, 100),
+      }),
+      4500,
+      'Historial de carga'
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, historyPath);
   }
@@ -378,3 +414,116 @@ export async function fetchUploadHistory(): Promise<UploadHistoryItem[]> {
     handleFirestoreError(error, OperationType.LIST, path);
   }
 }
+
+export async function fetchDriveCatalog(): Promise<import('../types').DriveDocumentItem[]> {
+  const path = 'drive_catalog';
+  try {
+    const snap = await getDocs(query(collection(db, path), limit(250)));
+    return snap.docs.map((d) => d.data() as import('../types').DriveDocumentItem);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+export async function saveDriveCatalogToFirestore(
+  items: import('../types').DriveDocumentItem[],
+  syncedBy: string
+): Promise<void> {
+  const existingSnap = await getDocs(query(collection(db, 'drive_catalog'), limit(250)));
+  const incomingIds = new Set(items.map((i) => i.fileId));
+
+  // Remove deleted Drive files from catalog
+  const toDelete = existingSnap.docs.filter((d) => !incomingIds.has(d.id));
+  for (let i = 0; i < toDelete.length; i += 200) {
+    const batch = writeBatch(db);
+    toDelete.slice(i, i + 200).forEach((d) => batch.delete(d.ref));
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'drive_catalog');
+    }
+  }
+
+  // Upsert synced files
+  for (let i = 0; i < items.length; i += 200) {
+    const batch = writeBatch(db);
+    items.slice(i, i + 200).forEach((item) => {
+      const safeId = item.fileId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
+      batch.set(doc(db, 'drive_catalog', safeId), {
+        fileId: safeId,
+        name: item.name.slice(0, 240),
+        mimeType: item.mimeType.slice(0, 160),
+        category: item.category,
+        targetModule: item.targetModule,
+        folderPath: item.folderPath.slice(0, 300),
+        sizeBytes: Math.max(0, Number(item.sizeBytes) || 0),
+        modifiedTime: item.modifiedTime.slice(0, 64),
+        webViewLink: item.webViewLink.slice(0, 600),
+        syncedBy: syncedBy.slice(0, 160),
+        updatedAt: serverTimestamp(),
+      });
+    });
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'drive_catalog');
+    }
+  }
+
+  // Update repository sync state
+  const syncPath = 'drive_sync_state/repositorio';
+  try {
+    await setDoc(doc(db, 'drive_sync_state', 'repositorio'), {
+      module: 'repositorio',
+      driveFileId: '1YgxzUACQqjVBifrU9_Q5F-EyFT-X36Am',
+      fileName: 'Carpeta Central Google Drive',
+      mimeType: 'application/vnd.google-apps.folder',
+      modifiedTime: new Date().toISOString().slice(0, 64),
+      lastCheckedAt: new Date().toISOString().slice(0, 64),
+      validationStatus: 'ok',
+      rowCount: items.length,
+      updatedBy: syncedBy.slice(0, 160),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, syncPath);
+  }
+}
+
+export async function fetchDriveSyncStates(): Promise<
+  Record<string, import('../types').DriveSyncState>
+> {
+  const path = 'drive_sync_state';
+  try {
+    const snap = await getDocs(collection(db, path));
+    const map: Record<string, import('../types').DriveSyncState> = {};
+    snap.forEach((d) => {
+      const data = d.data() as import('../types').DriveSyncState;
+      map[data.module] = data;
+    });
+    return map;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+export async function saveDriveSyncState(
+  state: Omit<import('../types').DriveSyncState, 'updatedAt'>
+): Promise<void> {
+  const path = `drive_sync_state/${state.module}`;
+  try {
+    await setDoc(doc(db, 'drive_sync_state', state.module), {
+      ...state,
+      driveFileId: state.driveFileId.slice(0, 160),
+      fileName: state.fileName.slice(0, 240),
+      mimeType: state.mimeType.slice(0, 160),
+      modifiedTime: state.modifiedTime.slice(0, 64),
+      lastCheckedAt: state.lastCheckedAt.slice(0, 64),
+      updatedBy: state.updatedBy.slice(0, 160),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
